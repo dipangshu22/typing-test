@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blind typing test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E6EAEE; --surface:#F5F7F9; --ink:#1E2940; --muted:#66718A; --line:#C8CFDA;
+  --accent:#B87D00; --accent-soft:#F3E3BC; --err:#B3362A; --err-soft:#F6DAD6;
+  --ui:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131926; --surface:#1A2233; --ink:#DCE3F0; --muted:#8490A8; --line:#2D3852;
+    --accent:#F0B43C; --accent-soft:#3A3120; --err:#F07A6A; --err-soft:#3D2323;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131926; --surface:#1A2233; --ink:#DCE3F0; --muted:#8490A8; --line:#2D3852;
+  --accent:#F0B43C; --accent-soft:#3A3120; --err:#F07A6A; --err-soft:#3D2323;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:17px;line-height:1.5}
+.wrap{max-width:860px;margin:0 auto;padding:40px 20px 64px}
+h1{font-size:2rem;line-height:1.15;margin:0 0 4px;letter-spacing:-0.01em}
+.lede{color:var(--muted);margin:0 0 28px}
+
+.controls{display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-end;margin-bottom:14px}
+.group{display:flex;flex-direction:column;gap:6px}
+.group > span{font-size:.85rem;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--surface);flex-wrap:wrap}
+.seg button{font:inherit;font-size:.95rem;border:0;background:transparent;color:var(--ink);padding:6px 12px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.seg button:hover:not([aria-pressed="true"]){background:var(--accent-soft)}
+select{font:inherit;font-size:.95rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:220px;max-width:100%}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.statusbar{display:flex;justify-content:space-between;align-items:baseline;margin:26px 0 10px;gap:12px}
+.clock{font-family:var(--mono);font-size:2.4rem;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.clock.running{color:var(--accent)}
+.hint{color:var(--muted);font-size:.9rem;text-align:right}
+kbd{font-family:var(--mono);font-size:.8rem;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--surface)}
+
+.stage{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;cursor:text}
+.viewport{position:relative;height:calc(1.9em * 3);overflow:hidden;font-family:var(--mono);font-size:1.35rem;line-height:1.9em;scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){.viewport{scroll-behavior:auto}}
+.word{display:inline-block}
+.ch{white-space:pre;position:relative;color:var(--ink);transition:opacity .15s}
+.ch.done{opacity:.22}
+.ch.cur::before{content:"";position:absolute;left:-1px;top:.25em;bottom:.25em;width:2px;background:var(--accent);animation:blink 1s steps(1) infinite}
+.stage.typing .ch.cur::before{animation:none}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.ch.cur::before{animation:none}}
+.veil{position:absolute;inset:0;border-radius:14px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--surface) 70%,transparent);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);font-size:1rem;color:var(--ink)}
+.ghost{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;resize:none;font-size:16px;pointer-events:none}
+
+.results{margin-top:28px}
+.headline{display:flex;flex-wrap:wrap;gap:12px 48px;align-items:flex-end;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.big{display:flex;flex-direction:column}
+.big b{font-family:var(--mono);font-size:4rem;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.big small{color:var(--muted);font-size:.95rem;margin-top:6px}
+.minor{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 24px;margin:20px 0 8px}
+.minor div{display:flex;flex-direction:column}
+.minor span{color:var(--muted);font-size:.85rem}
+.minor strong{font-family:var(--mono);font-weight:500;font-size:1.2rem}
+.verdict{margin:14px 0 0;max-width:62ch}
+h2{font-size:1.15rem;margin:32px 0 10px}
+.review{font-family:var(--mono);font-size:1rem;line-height:1.9;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;max-height:220px;overflow:auto;word-break:break-word}
+.review .bad{color:var(--err);background:var(--err-soft);border-radius:3px}
+.mistakes{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0}
+.mistakes li{font-family:var(--mono);font-size:.92rem;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.mistakes .exp{color:var(--ink)}
+.mistakes .got{color:var(--err)}
+.none{color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+.btn{font:inherit;border-radius:10px;padding:10px 18px;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--surface)}
+.btn.alt{background:transparent;color:var(--ink);border-color:var(--line)}
+@media (max-width:560px){
+  .wrap{padding:28px 16px 48px}
+  h1{font-size:1.6rem}
+  .viewport{font-size:1.1rem}
+  .big b{font-size:3rem}
+  .stage{padding:16px}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+(function(){
+const h = React.createElement;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
+
+/* ---------- content ---------- */
+const PARAGRAPHS = [
+  { title: "The river ferry", text: "The ferry left at six every morning, whether or not anyone was aboard. Fishermen said the captain kept time by the smell of the tea stalls opening on the bank. By the time the fog lifted, the boat was already halfway across, cutting a pale line through the brown water while gulls argued over what the nets had missed." },
+  { title: "Small bugs", text: "Most bugs are not mysteries; they are small misunderstandings that grew quietly. A variable holds a value you did not expect, a function runs twice instead of once, or a date is read in the wrong time zone. The fix is rarely clever. It usually begins with reading the error message slowly and asking what the program actually did, not what you hoped it would do." },
+  { title: "Tea gardens", text: "Rows of tea bushes roll over the low hills like a green sea frozen mid-wave. Pickers move between them with baskets on their backs, choosing only the top two leaves and a bud. It is careful work, done by hand, and the rhythm of it has barely changed in a hundred years, even as the machines in the factory below grow louder." },
+  { title: "First monsoon rain", text: "The first heavy rain of the season arrives without much warning. One moment the air is thick and still; the next, the street is a shallow river and every roof is drumming. Children run out to stand in it, shopkeepers drag their goods under awnings, and for a few minutes the whole neighbourhood forgets whatever it was worried about." },
+  { title: "The front desk", text: "A good front desk runs on small promises kept. The room is ready when the guest was told it would be, the booking from last night actually appears in the system, and the late checkout someone asked for at breakfast is still remembered by the afternoon shift. Guests rarely notice any of this until one piece goes missing." },
+  { title: "Old starlight", text: "Light from the nearest star beyond the sun takes a little over four years to reach us. When you look at it, you are seeing a message that left before you last changed your phone. The farthest objects we can observe are so distant that their light began travelling before the Earth itself had formed." },
+  { title: "Showing up", text: "Practice is less about effort on a single day than about showing up on ordinary ones. Ten focused minutes every evening will carry you further than a long weekend of determination followed by a month of rest. The trick is to make the first step so small that skipping it feels more awkward than doing it." },
+  { title: "Grandfather's radio", text: "My grandfather owned a radio the size of a suitcase, with a dial that glowed orange when it warmed up. He would turn the knob slowly, past crackling stations in languages none of us spoke, until he found the evening news. Then he would sit back, close his eyes, and listen as if the voice were in the room." }
+];
+
+const COMMON = ("the be of and a to in he have it that for they with as not on she at by this we you do but from or which one would all will there say who make when can more if no man out other so what time up go about than into could state only new year some take come these know see use get like then first any work now may such give over think most even find day also after way many must look before great back through long where much should well people down own just because good each those feel seem how high too place little world very still nation hand old life tell write become here show house both between need mean call develop under last right move thing general school never same another begin while number part turn real leave might want point form off child few small since against ask late home interest large person end open public follow during present without again hold govern around possible head consider word program problem however lead system set order eye plan run keep face fact group play stand increase early course change help line").split(" ");
+
+const HOME = "as ask add all ash dad fad gas had has lad lag sad hall fall gall lass flask flash glass salad alas shall dash gash lash half jag hag sag slag slash hash sash skald".split(" ");
+const TOP = "we were wet quiet quit quote rope ripe route tire tower power poet pour prey pretty type typo your you yet toy trip writer put pure pew wiper outer tier query rote pier".split(" ");
+const DRILLS = "fjf jfj dkd kdk sls lsl a;a ;a; ghg hgh fjdk skal ruru eiei wowo qpqp tyty vmvm bnbn cxcx fj dk sl a; gh ty vn".split(" ");
+const PUNCT_WORDS = "yes no well wait really okay today maybe however first then also still after before here there because although".split(" ");
+
+function pick(list, prev){ let w; do { w = list[Math.floor(Math.random()*list.length)]; } while (list.length > 1 && w === prev); return w; }
+function fromList(list, n){ const out=[]; let prev=null; for(let i=0;i<n;i++){ prev = pick(list, prev); out.push(prev);} return out.join(" "); }
+function rint(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+const PATTERNS = {
+  common:  { label: "Common words",        gen: n => fromList(COMMON, n) },
+  home:    { label: "Home row words",       gen: n => fromList(HOME, n) },
+  top:     { label: "Top row words",        gen: n => fromList(TOP, n) },
+  drills:  { label: "Finger drills",        gen: n => fromList(DRILLS, n) },
+  numbers: { label: "Numbers",              gen: n => { const o=[]; for(let i=0;i<n;i++){ const k=rint(0,5);
+      o.push(k===0 ? String(rint(1,99)) : k===1 ? String(rint(100,9999)) : k===2 ? rint(1,99)+"."+rint(0,9) : k===3 ? rint(1,12)+":"+String(rint(0,59)).padStart(2,"0") : k===4 ? rint(1,99)+","+String(rint(0,999)).padStart(3,"0") : String(rint(1990,2030))); } return o.join(" "); } },
+  punct:   { label: "Punctuation",          gen: n => { const o=[]; let prev=null; for(let i=0;i<n;i++){ prev=pick(i%2?PUNCT_WORDS:COMMON, prev); const k=rint(0,7);
+      o.push(k===0? prev+"," : k===1? prev+"." : k===2? prev+"?" : k===3? prev+"!" : k===4? "("+prev+")" : k===5? '"'+prev+'"' : k===6? prev+";" : prev+":"); } return o.join(" "); } },
+  capitals:{ label: "Capital letters",      gen: n => fromList(COMMON, n).split(" ").map((w,i)=> i%2===0 ? w[0].toUpperCase()+w.slice(1) : w).join(" ") }
+};
+
+const TIMES = [15, 30, 60, 120];
+
+/* ---------- app ---------- */
+function App(){
+  const [mode, setMode] = useState("paragraph");       // paragraph | words
+  const [paraChoice, setParaChoice] = useState("random");
+  const [pattern, setPattern] = useState("common");
+  const [duration, setDuration] = useState(60);
+
+  const [text, setText] = useState("");
+  const [typed, setTyped] = useState("");
+  const [status, setStatus] = useState("idle");        // idle | running | done
+  const [startAt, setStartAt] = useState(0);
+  const [now, setNow] = useState(0);
+  const [focused, setFocused] = useState(false);
+  const statsRef = useRef({ keystrokes: 0, errors: 0, corrections: 0 });
+  const nextParaRef = useRef(0);
+
+  const inputRef = useRef(null);
+  const viewRef = useRef(null);
+  const cursorRef = useRef(null);
+
+  const makeInitial = useCallback(() => {
+    if (mode === "paragraph") {
+      const start = paraChoice === "random" ? Math.floor(Math.random()*PARAGRAPHS.length) : Number(paraChoice);
+      nextParaRef.current = start + 1;
+      return PARAGRAPHS[start].text;
+    }
+    return PATTERNS[pattern].gen(90);
+  }, [mode, paraChoice, pattern]);
+
+  const makeMore = useCallback(() => {
+    if (mode === "paragraph") {
+      const p = PARAGRAPHS[nextParaRef.current % PARAGRAPHS.length];
+      nextParaRef.current += 1;
+      return p.text;
+    }
+    return PATTERNS[pattern].gen(40);
+  }, [mode, pattern]);
+
+  const reset = useCallback((keepText) => {
+    if (!keepText) setText(makeInitial());
+    setTyped("");
+    setStatus("idle");
+    setStartAt(0); setNow(0);
+    statsRef.current = { keystrokes: 0, errors: 0, corrections: 0 };
+    if (viewRef.current) viewRef.current.scrollTop = 0;
+    if (inputRef.current) { inputRef.current.value = ""; setTimeout(() => inputRef.current && inputRef.current.focus(), 0); }
+  }, [makeInitial]);
+
+  // new text whenever the setup changes
+  useEffect(() => { reset(false); }, [mode, paraChoice, pattern, duration]); // eslint-disable-line
+
+  // keep text ahead of the typist
+  useEffect(() => {
+    if (text && typed.length > text.length - 160) setText(t => t + " " + makeMore());
+  }, [typed.length, text, makeMore]);
+
+  // timer
+  useEffect(() => {
+    if (status !== "running") return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if ((t - startAt) / 1000 >= duration) {
+        setStatus("done");
+        if (inputRef.current) inputRef.current.blur();
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [status, startAt, duration]);
+
+  // keep the cursor on the second visible line
+  useLayoutEffect(() => {
+    const c = cursorRef.current, v = viewRef.current;
+    if (!c || !v) return;
+    const lineH = c.offsetHeight || 30;
+    v.scrollTop = Math.max(0, c.offsetTop - lineH);
+  }, [typed.length, text]);
+
+  // Tab / Esc to restart from anywhere
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === "Tab" && !e.shiftKey && (document.activeElement === inputRef.current || status === "done")) { e.preventDefault(); reset(false); }
+      else if (e.key === "Escape") { e.preventDefault(); reset(true); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reset, status]);
+
+  function onInput(e){
+    if (status === "done") return;
+    const v = e.target.value.replace(/[\r\n]/g, "");
+    if (status === "idle" && v.length > 0) { const t = Date.now(); setStartAt(t); setNow(t); setStatus("running"); }
+    const s = statsRef.current;
+    if (v.length > typed.length) {
+      for (let i = typed.length; i < v.length; i++) { s.keystrokes++; if (v[i] !== text[i]) s.errors++; }
+    } else if (v.length < typed.length) {
+      s.corrections += typed.length - v.length;
+    }
+    setTyped(v);
+  }
+
+  const elapsed = status === "idle" ? 0 : Math.min(duration, (now - startAt) / 1000);
+  const remaining = Math.max(0, duration - elapsed);
+
+  // split target into words with global char offsets
+  const words = useMemo(() => {
+    const out = []; const re = /\S+\s*/g; let m;
+    while ((m = re.exec(text))) out.push({ s: m[0], start: m.index });
+    return out;
+  }, [text]);
+
+  const results = useMemo(() => {
+    if (status !== "done") return null;
+    const minutes = duration / 60;
+    let correct = 0;
+    for (let i = 0; i < typed.length; i++) if (typed[i] === text[i]) correct++;
+    const s = statsRef.current;
+    const mistakes = [];
+    for (const w of words) {
+      if (w.start >= typed.length) break;
+      const word = w.s.trimEnd();
+      const end = w.start + word.length;
+      const got = typed.slice(w.start, Math.min(end, typed.length));
+      const partial = end > typed.length;
+      if (!partial && got !== word) mistakes.push({ exp: word, got });
+    }
+    return {
+      wpm: Math.round((correct / 5) / minutes),
+      raw: Math.round((typed.length / 5) / minutes),
+      accuracy: typed.length ? Math.round(correct / typed.length * 1000) / 10 : 0,
+      keyAcc: s.keystrokes ? Math.round((s.keystrokes - s.errors) / s.keystrokes * 1000) / 10 : 0,
+      correct, total: typed.length, wrong: typed.length - correct,
+      corrections: s.corrections, mistakes
+    };
+  }, [status, typed, text, words, duration]);
+
+  /* ---------- render ---------- */
+  const seg = (options, value, set) => h("div", { className: "seg", role: "group" },
+    options.map(o => h("button", { key: o.value, type: "button", "aria-pressed": value === o.value, onClick: () => set(o.value) }, o.label)));
+
+  const controls = h("div", { className: "controls" },
+    h("div", { className: "group" }, h("span", null, "Text"),
+      seg([{ value: "paragraph", label: "Paragraphs" }, { value: "words", label: "Word patterns" }], mode, setMode)),
+    mode === "paragraph"
+      ? h("label", { className: "group" }, h("span", null, "Paragraph"),
+          h("select", { value: paraChoice, onChange: e => setParaChoice(e.target.value) },
+            h("option", { value: "random" }, "Random"),
+            PARAGRAPHS.map((p, i) => h("option", { key: i, value: String(i) }, p.title))))
+      : h("label", { className: "group" }, h("span", null, "Pattern"),
+          h("select", { value: pattern, onChange: e => setPattern(e.target.value) },
+            Object.entries(PATTERNS).map(([k, p]) => h("option", { key: k, value: k }, p.label)))),
+    h("div", { className: "group" }, h("span", null, "Time"),
+      seg(TIMES.map(t => ({ value: t, label: t < 60 ? t + "s" : (t / 60) + " min" })), duration, setDuration))
+  );
+
+  const fmt = sec => { const s = Math.ceil(sec); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+
+  const statusbar = h("div", { className: "statusbar" },
+    h("div", { className: "clock" + (status === "running" ? " running" : ""), "aria-live": "off" }, fmt(remaining)),
+    h("div", { className: "hint" },
+      status === "idle" ? "The timer starts on your first key. " : status === "running" ? "Keep going, you won't see your keys. " : "",
+      h("kbd", null, "Tab"), " new text  ", h("kbd", null, "Esc"), " restart"));
+
+  const stage = h("div", {
+      className: "stage" + (status === "running" ? " typing" : ""),
+      onClick: () => inputRef.current && inputRef.current.focus()
+    },
+    h("div", { className: "viewport", ref: viewRef, "aria-label": "Text to type" },
+      words.map((w, wi) => h("span", { className: "word", key: wi },
+        Array.from(w.s).map((ch, ci) => {
+          const i = w.start + ci;
+          const cls = i < typed.length ? "ch done" : i === typed.length ? "ch cur" : "ch";
+          return h("span", { key: ci, className: cls, ref: i === typed.length ? cursorRef : null }, ch);
+        })))),
+    h("textarea", {
+      ref: inputRef, className: "ghost", "aria-label": "Typing input (hidden)",
+      autoComplete: "off", autoCorrect: "off", autoCapitalize: "off", spellCheck: false,
+      onChange: onInput, onPaste: e => e.preventDefault(), onDrop: e => e.preventDefault(),
+      onFocus: () => setFocused(true), onBlur: () => setFocused(false),
+      disabled: status === "done"
+    }),
+    (!focused && status !== "done") ? h("div", { className: "veil" }, status === "running" ? "Paused focus. Click here to keep typing." : "Click here, then start typing") : null
+  );
+
+  let resultsView = null;
+  if (results) {
+    const verdict = results.total === 0
+      ? "Nothing was typed this round. Click the text box and start typing to begin the next one."
+      : results.accuracy >= 97 ? "Very clean. You're typing accurately without looking, so speed is the thing to push next."
+      : results.accuracy >= 90 ? "Solid. A few slips crept in; slowing down slightly usually raises net speed when you can't see your mistakes."
+      : "Lots of errors went unnoticed. Try a slower pace or a home row drill to build position memory.";
+    resultsView = h("section", { className: "results", "aria-live": "polite" },
+      h("div", { className: "headline" },
+        h("div", { className: "big" }, h("b", null, results.wpm), h("small", null, "words per minute")),
+        h("div", { className: "big" }, h("b", null, results.accuracy + "%"), h("small", null, "accuracy"))),
+      h("div", { className: "minor" },
+        h("div", null, h("span", null, "Raw speed"), h("strong", null, results.raw + " wpm")),
+        h("div", null, h("span", null, "Correct characters"), h("strong", null, results.correct + " / " + results.total)),
+        h("div", null, h("span", null, "Wrong characters"), h("strong", null, results.wrong)),
+        h("div", null, h("span", null, "Keystroke accuracy"), h("strong", null, results.keyAcc + "%")),
+        h("div", null, h("span", null, "Backspaces"), h("strong", null, results.corrections)),
+        h("div", null, h("span", null, "Time"), h("strong", null, fmt(duration)))),
+      h("p", { className: "verdict" }, verdict),
+      h("h2", null, "What you actually typed"),
+      h("div", { className: "review" },
+        results.total === 0 ? h("span", { className: "none" }, "Nothing typed.") :
+        Array.from(typed).map((c, i) => c === text[i]
+          ? h("span", { key: i }, c)
+          : h("span", { key: i, className: "bad", title: "Expected " + JSON.stringify(text[i]) }, c === " " ? "␣" : c))),
+      h("h2", null, "Words with mistakes"),
+      results.mistakes.length === 0
+        ? h("p", { className: "none" }, "No mistaken words.")
+        : h("ul", { className: "mistakes" }, results.mistakes.slice(0, 30).map((m, i) =>
+            h("li", { key: i }, h("span", { className: "exp" }, m.exp), "  ", h("span", { className: "got" }, m.got.replace(/ /g, "␣") || "(skipped)")))),
+      h("div", { className: "actions" },
+        h("button", { className: "btn", type: "button", onClick: () => reset(false) }, "New text"),
+        h("button", { className: "btn alt", type: "button", onClick: () => reset(true) }, "Retry same text"))
+    );
+  }
+
+  return h("main", { className: "wrap" },
+    h("h1", null, "Blind typing test"),
+    h("p", { className: "lede" }, "You see the text you need to type, never the keys you press. Your accuracy shows up only at the end."),
+    controls, statusbar, stage, resultsView);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+})();
+</script>
+</body>
+</html>
