@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
-import { PARAGRAPHS, PATTERNS, TIMES } from "./textData.js";
+import { PARAGRAPHS, PATTERNS, TIMES, addPunctuation, stripPunctuation } from "./textData.js";
 
 const formatTime = sec => {
   const s = Math.ceil(sec);
@@ -24,6 +24,7 @@ export default function TypingTest() {
   const [paraChoice, setParaChoice] = useState("random");
   const [pattern, setPattern] = useState("common");
   const [duration, setDuration] = useState(60);
+  const [punct, setPunct] = useState(true);
 
   // test state
   const [text, setText] = useState("");
@@ -33,29 +34,44 @@ export default function TypingTest() {
   const [now, setNow] = useState(0);
   const [focused, setFocused] = useState(false);
 
-  const statsRef = useRef({ keystrokes: 0, errors: 0, corrections: 0 });
   const nextParaRef = useRef(0);
+  const poolRef = useRef(PARAGRAPHS);
   const inputRef = useRef(null);
   const viewRef = useRef(null);
   const cursorRef = useRef(null);
 
+  // Apply the punctuation setting to paragraphs and to word patterns that support it
+  const shapeParagraph = useCallback(t => (punct ? t : stripPunctuation(t)), [punct]);
+  const shapeWords = useCallback(
+    t => (punct && PATTERNS[pattern].punctuable ? addPunctuation(t) : t),
+    [punct, pattern]
+  );
+
   const makeInitial = useCallback(() => {
     if (mode === "paragraph") {
-      const start = paraChoice === "random" ? Math.floor(Math.random() * PARAGRAPHS.length) : Number(paraChoice);
+      // Which pool to draw from and continue with
+      const pool = paraChoice === "random-long" ? PARAGRAPHS.filter(p => p.long)
+        : paraChoice === "random-short" ? PARAGRAPHS.filter(p => !p.long)
+        : PARAGRAPHS;
+      poolRef.current = pool;
+      const start = paraChoice.startsWith("random")
+        ? Math.floor(Math.random() * pool.length)
+        : Number(paraChoice);
       nextParaRef.current = start + 1;
-      return PARAGRAPHS[start].text;
+      return shapeParagraph(pool[start].text);
     }
-    return PATTERNS[pattern].gen(90);
-  }, [mode, paraChoice, pattern]);
+    return shapeWords(PATTERNS[pattern].gen(90));
+  }, [mode, paraChoice, pattern, shapeParagraph, shapeWords]);
 
   const makeMore = useCallback(() => {
     if (mode === "paragraph") {
-      const p = PARAGRAPHS[nextParaRef.current % PARAGRAPHS.length];
+      const pool = poolRef.current;
+      const p = pool[nextParaRef.current % pool.length];
       nextParaRef.current += 1;
-      return p.text;
+      return shapeParagraph(p.text);
     }
-    return PATTERNS[pattern].gen(40);
-  }, [mode, pattern]);
+    return shapeWords(PATTERNS[pattern].gen(40));
+  }, [mode, pattern, shapeParagraph, shapeWords]);
 
   const reset = useCallback(keepText => {
     if (!keepText) setText(makeInitial());
@@ -63,19 +79,15 @@ export default function TypingTest() {
     setStatus("idle");
     setStartAt(0);
     setNow(0);
-    statsRef.current = { keystrokes: 0, errors: 0, corrections: 0 };
     if (viewRef.current) viewRef.current.scrollTop = 0;
-    if (inputRef.current) {
-      inputRef.current.value = "";
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [makeInitial]);
 
   // New text whenever the setup changes
   useEffect(() => {
     reset(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, paraChoice, pattern, duration]);
+  }, [mode, paraChoice, pattern, duration, punct]);
 
   // Keep the text ahead of the typist
   useEffect(() => {
@@ -120,23 +132,43 @@ export default function TypingTest() {
     return () => window.removeEventListener("keydown", onKey);
   }, [reset, status]);
 
+  // Block Backspace, Delete, undo and caret movement
+  const BLOCKED_KEYS = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"];
+  function handleKeyDown(e) {
+    if (BLOCKED_KEYS.includes(e.key)) { e.preventDefault(); return; }
+    if ((e.ctrlKey || e.metaKey) && ["z", "y", "x", "a"].includes(e.key.toLowerCase())) e.preventDefault();
+  }
+
+  // Mobile keyboards don't always send a Backspace key event, so also stop deletions at the input level
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const onBeforeInput = e => {
+      if (e.inputType && (e.inputType.startsWith("delete") || e.inputType.startsWith("history"))) e.preventDefault();
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, []);
+
+  // Keep the caret pinned to the end
+  function pinCaret(e) {
+    const len = e.target.value.length;
+    if (e.target.selectionStart !== len || e.target.selectionEnd !== len) e.target.setSelectionRange(len, len);
+  }
+
   function handleInput(e) {
     if (status === "done") return;
     const value = e.target.value.replace(/[\r\n]/g, "");
+    // No going back: reject anything that deletes or edits earlier characters
+    if (value.length <= typed.length || !value.startsWith(typed)) {
+      e.target.value = typed;
+      return;
+    }
     if (status === "idle" && value.length > 0) {
       const t = Date.now();
       setStartAt(t);
       setNow(t);
       setStatus("running");
-    }
-    const s = statsRef.current;
-    if (value.length > typed.length) {
-      for (let i = typed.length; i < value.length; i++) {
-        s.keystrokes++;
-        if (value[i] !== text[i]) s.errors++;
-      }
-    } else if (value.length < typed.length) {
-      s.corrections += typed.length - value.length;
     }
     setTyped(value);
   }
@@ -169,16 +201,13 @@ export default function TypingTest() {
       if (got !== word) mistakes.push({ exp: word, got });
     }
 
-    const s = statsRef.current;
     return {
       wpm: Math.round(correct / 5 / minutes),
       raw: Math.round(typed.length / 5 / minutes),
       accuracy: typed.length ? Math.round((correct / typed.length) * 1000) / 10 : 0,
-      keyAcc: s.keystrokes ? Math.round(((s.keystrokes - s.errors) / s.keystrokes) * 1000) / 10 : 0,
       correct,
       total: typed.length,
       wrong: typed.length - correct,
-      corrections: s.corrections,
       mistakes,
     };
   }, [status, typed, text, words, duration]);
@@ -191,7 +220,7 @@ export default function TypingTest() {
 
   return (
     <main className="wrap">
-      <h1>Blind typing test</h1>
+      <h1>Blind typing test for Anurag!</h1>
       <p className="lede">You see the text you need to type, never the keys you press. Your accuracy shows up only at the end.</p>
 
       <div className="controls">
@@ -208,8 +237,15 @@ export default function TypingTest() {
           <label className="group">
             <span>Paragraph</span>
             <select value={paraChoice} onChange={e => setParaChoice(e.target.value)}>
-              <option value="random">Random</option>
-              {PARAGRAPHS.map((p, i) => <option key={i} value={String(i)}>{p.title}</option>)}
+              <option value="random">Random (any length)</option>
+              <option value="random-short">Random short</option>
+              <option value="random-long">Random long</option>
+              <optgroup label="Short paragraphs">
+                {PARAGRAPHS.map((p, i) => !p.long && <option key={i} value={String(i)}>{p.title}</option>)}
+              </optgroup>
+              <optgroup label="Long paragraphs">
+                {PARAGRAPHS.map((p, i) => p.long && <option key={i} value={String(i)}>{p.title}</option>)}
+              </optgroup>
             </select>
           </label>
         ) : (
@@ -219,6 +255,17 @@ export default function TypingTest() {
               {Object.entries(PATTERNS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
             </select>
           </label>
+        )}
+
+        {(mode === "paragraph" || PATTERNS[pattern].punctuable) && (
+          <div className="group">
+            <span>Punctuation</span>
+            <Segmented
+              options={[{ value: true, label: "On" }, { value: false, label: "Off" }]}
+              value={punct}
+              onChange={setPunct}
+            />
+          </div>
         )}
 
         <div className="group">
@@ -234,7 +281,7 @@ export default function TypingTest() {
       <div className="statusbar">
         <div className={"clock" + (status === "running" ? " running" : "")}>{formatTime(remaining)}</div>
         <div className="hint">
-          {status === "idle" && "The timer starts on your first key. "}
+          {status === "idle" && "The timer starts on your first key. Backspace is off. "}
           {status === "running" && "Keep going, you won't see your keys. "}
           <kbd>Tab</kbd> new text &nbsp;<kbd>Esc</kbd> restart
         </div>
@@ -263,7 +310,10 @@ export default function TypingTest() {
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
+          value={typed}
           onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          onSelect={pinCaret}
           onPaste={e => e.preventDefault()}
           onDrop={e => e.preventDefault()}
           onFocus={() => setFocused(true)}
@@ -289,8 +339,6 @@ export default function TypingTest() {
             <div><span>Raw speed</span><strong>{results.raw} wpm</strong></div>
             <div><span>Correct characters</span><strong>{results.correct} / {results.total}</strong></div>
             <div><span>Wrong characters</span><strong>{results.wrong}</strong></div>
-            <div><span>Keystroke accuracy</span><strong>{results.keyAcc}%</strong></div>
-            <div><span>Backspaces</span><strong>{results.corrections}</strong></div>
             <div><span>Time</span><strong>{formatTime(duration)}</strong></div>
           </div>
 
